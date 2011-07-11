@@ -1,19 +1,21 @@
-CFLAGS_GLIB=$(shell pkg-config --cflags glib-2.0)
-LDFLAGS_GLIB=$(shell pkg-config --libs glib-2.0)
-
 CFLAGS_OPENSSL=$(shell pkg-config --cflags openssl)
 LDFLAGS_OPENSSL=$(shell pkg-config --libs openssl)
 
-CFLAGS=${CFLAGS_GLIB} ${CFLAGS_OPENSSL} -Wall -pedantic
-LDFLAGS=${LDFLAGS_GLIB} ${LDFLAGS_OPENSSL}
+CC=gcc
+CFLAGS=${CFLAGS_OPENSSL} -Wall -pedantic -g
+LDFLAGS=${LDFLAGS_OPENSSL}
 
 SOURCES+=error.c
+SOURCES+=base64.c
+SOURCES+=cr.c
+SOURCES+=rsa.c
 OBJECTS=${SOURCES:.c=.o}
 
-all: privme
+all: cr
 
-privme: ${OBJECTS}
+cr: ${OBJECTS}
+	${CC} ${CFLAGS} ${OBJECTS} ${LDFLAGS} -o $@
 
 clean:
-	rm -f privme
+	rm -f cr
 	rm -f ${OBJECTS}
