@@ -1,33 +1,69 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
+#include <string.h>
 
 #include "error.h"
+
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 
 long g_errors[MAX_ERRORS];
 long g_error_pos = 0;
 
 const char* g_error_strings[] = {
-  "Invalid error code",
-  "Private key error",
-  "Encryption error"
+  "invalid error code",
+  "private key error",
+  "encryption error",
+  "hash size mismatch"
 };
 
-void error_push(long code) {
+void error_all_print(const char* func)
+{
+  char buffer[1024];
+  long code;
+
+  if (errno != 0) {
+    error_errno_print(stderr, func);
+  }
+
+  if (g_error_pos > 0) {
+    error_print(stderr, func);
+  }
+
+  SSL_load_error_strings();
+
+  while ((code = ERR_get_error()) != 0) {
+    ERR_error_string_n(code, buffer, 1024);
+    fprintf(stderr, "openssl:%s\n", buffer);
+  }
+}
+
+void error_errno_print(FILE* fp, const char* func)
+{
+  fprintf(fp, "errno:%s:%s\n", func, strerror(errno));
+}
+
+void error_push(long code)
+{
   if (g_error_pos >= MAX_ERRORS) {
     error_push(ERROR_INVALID_CODE);
-    error_exit();
+    error_all_print("error_push");
+    exit(1);
   }
 
   if (code >= sizeof(g_error_strings)) {
     error_push(ERROR_INVALID_CODE);
-    error_exit();
+    error_all_print("error_push");
+    exit(1);
   }
 
   g_errors[g_error_pos] = code;
   g_error_pos += 1;
 }
 
-long error_pop() {
+long error_pop()
+{
   long code = 0;
 
   if (g_error_pos <= 0) {
@@ -41,26 +77,22 @@ long error_pop() {
   return code;
 }
 
-const char* error_str(long code) {
+const char* error_str(long code)
+{
   return g_error_strings[code-1];
 }
 
-void error_print(FILE* fp) {
+void error_print(FILE* fp, const char* func)
+{
   long code;
-  int i = 1;
 
   while ((code = error_pop()) != 0) {
-    fprintf(fp, "error#%03d:%s\n", i++, error_str(code));
+    fprintf(fp, "error:%s:%04d:%s\n", func, code, error_str(code));
   }
 }
 
-void error_exit() {
-  fprintf(stderr, "Exiting with errors\n");
-  error_print(stderr);
-  exit(1);
-}
-
-void error_setup() {
+void error_setup()
+{
   long i;
   for (i = 0; i < MAX_ERRORS; i++) {
     g_errors[i] = 0;
