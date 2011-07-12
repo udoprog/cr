@@ -54,18 +54,28 @@ int string_inc(string* s) {
   return tmp_base_size;
 }
 
-int string_set(string* s, const char* source, int source_size)
+int string_set(string* s, const char* source, int size)
 {
-  while (source_size + 1 > s->_bss) {
+  string_set_offset(s, source, 0, size);
+}
+
+int string_append(string* s, const char* source, int size)
+{
+  string_set_offset(s, source, s->size, size);
+}
+
+int string_set_offset(string* s, const char* source, int offset, int size)
+{
+  while (offset + size + 1 > s->_bss) {
     if (string_inc(s) == 0) {
       return 0;
     }
   }
 
-  memcpy(s->base, source, source_size);
-  s->base[source_size] = '\0';
-  s->size = source_size;
-  memset(s->base + source_size, 0x00, s->_bss - source_size);
+  memcpy(s->base + offset, source, size);
+  s->base[offset + size] = '\0';
+  s->size = offset + size;
+  memset(s->base + offset + size, 0x00, s->_bss - offset - size);
 
-  return source_size;
+  return s->size;
 }

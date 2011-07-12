@@ -15,7 +15,8 @@ const char* g_error_strings[] = {
   "private key error",
   "public key error",
   "encryption error",
-  "hash size mismatch"
+  "hash size mismatch",
+  "unsupported algorithm"
 };
 
 void error_all_print(const char* func)

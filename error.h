@@ -8,6 +8,7 @@
 #define ERROR_PUBLIC_KEY 3
 #define ERROR_ENCRYPT 4
 #define ERROR_HASH_SIZE 5
+#define ERROR_UNSUPPORTED_ALGORITHM 6
 
 void          error_setup();
 void          error_push(long);
