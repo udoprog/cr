@@ -9,6 +9,7 @@ SOURCES+=error.c
 SOURCES+=base64.c
 SOURCES+=cr.c
 SOURCES+=rsa.c
+SOURCES+=string.c
 OBJECTS=${SOURCES:.c=.o}
 
 all: cr

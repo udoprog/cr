@@ -14,6 +14,7 @@ long g_error_pos = 0;
 const char* g_error_strings[] = {
   "invalid error code",
   "private key error",
+  "public key error",
   "encryption error",
   "hash size mismatch"
 };
@@ -87,7 +88,7 @@ void error_print(FILE* fp, const char* func)
   long code;
 
   while ((code = error_pop()) != 0) {
-    fprintf(fp, "error:%s:%04d:%s\n", func, code, error_str(code));
+    fprintf(fp, "error:%s:%04lu:%s\n", func, code, error_str(code));
   }
 }
 

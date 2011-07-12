@@ -5,8 +5,9 @@
 
 #define ERROR_INVALID_CODE 1
 #define ERROR_PRIVATE_KEY 2
-#define ERROR_ENCRYPT 3
-#define ERROR_HASH_SIZE 4
+#define ERROR_PUBLIC_KEY 3
+#define ERROR_ENCRYPT 4
+#define ERROR_HASH_SIZE 5
 
 void          error_setup();
 void          error_push(long);
