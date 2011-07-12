@@ -212,7 +212,7 @@ int verify_callback() {
     return verify_private_callback();
   }
 
-  fprintf(stderr, "no key specified, neither -priv nor -pub");
+  fprintf(stderr, "no key specified, neither -priv nor -pub\n");
   return 1;
 }
 
