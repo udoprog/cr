@@ -8,7 +8,7 @@ The general idea is dead simple.
     #> cr sign -priv ~/.ssh/id_rsa -in data.txt -out signature.txt
     #> cr verify -priv ~/.ssh/id_rsa -in data.txt -sig signature.txt
     or
-    #> cr verify -pub ~/.ssh/id_rsa.pub -in data.txt -sig signature.txt
+    #> cr verify -pub ~/.ssh/id_rsa.pem -in data.txt -sig signature.txt
     VERIFY SUCCESS
 
 **cr** requires openssl, it's built using make.
@@ -17,6 +17,12 @@ The general idea is dead simple.
 
 **cr** can use both DSA and RSA keys, in the format in which they are generated
 by using _ssh-keygen_ or _openssl genrsa_.
+
+This is how you extract your ssh public key from your private.
+
+    #> openssl rsa -in ~/.ssh/id_rsa -pubout -out ~/.ssh/id_rsa.pem
+    or
+    #> openssl dsa -in ~/.ssh/id_dsa -pubout -out ~/.ssh/id_dsa.pem
 
 Private key decryption is not yet supported.
 
