@@ -1,5 +1,5 @@
-CFLAGS_OPENSSL=$(shell pkg-config --cflags openssl)
-LDFLAGS_OPENSSL=$(shell pkg-config --libs openssl)
+CFLAGS_OPENSSL=$(shell pkg-config --cflags libcrypto)
+LDFLAGS_OPENSSL=$(shell pkg-config --libs libcrypto)
 
 CC=gcc
 CFLAGS=${CFLAGS_OPENSSL} -Wall -pedantic -g

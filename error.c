@@ -5,7 +5,6 @@
 
 #include "error.h"
 
-#include <openssl/ssl.h>
 #include <openssl/err.h>
 
 long g_errors[MAX_ERRORS];
@@ -32,7 +31,7 @@ void error_all_print(const char* func)
     error_print(stderr, func);
   }
 
-  SSL_load_error_strings();
+  ERR_load_crypto_strings();
 
   while ((code = ERR_get_error()) != 0) {
     ERR_error_string_n(code, buffer, 1024);
