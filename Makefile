@@ -8,7 +8,7 @@ LDFLAGS=${LDFLAGS_OPENSSL}
 SOURCES+=error.c
 SOURCES+=base64.c
 SOURCES+=cr.c
-SOURCES+=rsa.c
+SOURCES+=evp.c
 SOURCES+=string.c
 OBJECTS=${SOURCES:.c=.o}
 

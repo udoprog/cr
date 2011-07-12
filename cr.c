@@ -7,7 +7,8 @@
 #include "error.h"
 #include "base64.h"
 #include "bool.h"
-#include "rsa.h"
+#include "string.h"
+#include "evp.h"
 
 char* g_private_key    = NULL;
 char* g_public_key     = NULL;
@@ -53,12 +54,20 @@ int generate_callback_help() {
 int sign_callback() {
   FILE* fp_in = stdin;
   FILE* fp_out = stdout;
-  unsigned char* data = NULL;
-  int size = 0;
+
+  string* s;
+  EVP_PKEY* evp;
 
   if (g_private_key == NULL) {
     fprintf(stderr, "private_key: must be defined\n");
     sign_callback_help();
+    return 1;
+  }
+
+  evp = evp_open_private(g_private_key);
+
+  if (evp == NULL) {
+    fprintf(stderr, "could not open private key\n");
     return 1;
   }
 
@@ -70,134 +79,58 @@ int sign_callback() {
     fp_out = g_out_fp;
   }
 
-  if (!rsa_signature(g_private_key, fp_in, &data, &size)) {
+  s = string_new();
+
+  if (!evp_sign(evp, fp_in, s)) {
+    string_free(s);
     return 1;
   }
 
-  if (!base64_fencode(fp_out, data, size)) {
-    free(data);
+  if (!base64_fencode(fp_out, string_base(s), string_size(s))) {
+    string_free(s);
     return 1;
   }
 
-  free(data);
+  string_free(s);
   return 0;
 }
 
-int verify_private_callback() {
+int verify_internal_callback(EVP_PKEY* evp) {
   FILE* fp = stdin;
-  unsigned char* s_sig = NULL;
   unsigned char* s_ref = NULL;
-  int i_sig = 0;
   int i_ref = 0;
+
+  string* ref;
 
   if (g_in_fp != NULL) {
     fp = g_in_fp;
-  }
-
-  if (!rsa_signature(g_private_key, fp, &s_sig, &i_sig)) {
-    return 1;
   }
 
   if (!base64_fdecode(g_signature_fp, &s_ref, &i_ref)) {
-    goto error;
+    goto error_evp;
   }
 
-  if (i_sig != i_ref) {
-    error_push(ERROR_HASH_SIZE);
-    error_all_print("base64_fdecode");
-    goto verify_error;
-  }
+  ref = string_new_p(s_ref, i_ref);
 
-  {
-    int i;
-
-    for (i = 0; i < i_ref; i++) {
-      if (s_ref[i] != s_sig[i]) {
-        goto verify_error;
-      }
-    }
+  if (!evp_verify(evp, fp, ref)) {
+    goto error_ref;
   }
 
   printf("VERIFY SUCCESS\n");
 
-  free(s_sig);
-  free(s_ref);
+  string_free(ref);
+  EVP_PKEY_free(evp);
   return 0;
-
-error:
-  free(s_sig);
-  free(s_ref);
+error_ref:
+  string_free(ref);
+error_evp:
+  EVP_PKEY_free(evp);
   return 1;
-
-verify_error:
-  printf("VERIFY FAILURE\n");
-
-  free(s_sig);
-  free(s_ref);
-  return 2;
-}
-
-int verify_public_callback() {
-  FILE* fp = stdin;
-  unsigned char* s_sig = NULL;
-  unsigned char* s_ref = NULL;
-  unsigned char* tmp_s_ref = NULL;
-  int i_sig = 0;
-  int i_ref = 0;
-  int tmp_i_ref = 0;
-
-  if (g_in_fp != NULL) {
-    fp = g_in_fp;
-  }
-
-  if (!rsa_sha1(fp, &s_sig, &i_sig)) {
-    return 1;
-  }
-
-  if (!base64_fdecode(g_signature_fp, &tmp_s_ref, &tmp_i_ref)) {
-    goto error;
-  }
-
-  if (!rsa_public_decrypt(g_public_key, tmp_s_ref, tmp_i_ref, &s_ref, &i_ref)) {
-    goto error;
-  }
-
-  if (i_sig != i_ref) {
-    error_push(ERROR_HASH_SIZE);
-    error_all_print("rsa_public_decrypt");
-    goto verify_error;
-  }
-
-  {
-    int i;
-
-    for (i = 0; i < i_ref; i++) {
-      if (s_ref[i] != s_sig[i]) {
-        goto verify_error;
-      }
-    }
-  }
-
-  printf("VERIFY SUCCESS\n");
-
-  free(s_sig);
-  free(s_ref);
-  return 0;
-
-error:
-  free(s_sig);
-  free(s_ref);
-  return 1;
-
-verify_error:
-  printf("VERIFY FAILURE\n");
-
-  free(s_sig);
-  free(s_ref);
-  return 2;
 }
 
 int verify_callback() {
+  EVP_PKEY* evp;
+
   if (g_signature == NULL) {
     fprintf(stderr, "signature: must be defined\n");
     verify_callback_help();
@@ -205,23 +138,37 @@ int verify_callback() {
   }
 
   if (g_public_key != NULL) {
-    return verify_public_callback();
+    evp = evp_open_public(g_public_key);
+
+    if (evp == NULL) {
+      fprintf(stderr, "Could not open public key\n");
+      error_all_print("verify_callback");
+      goto error_evp;
+    }
+
+    return verify_internal_callback(evp);
   }
 
   if (g_private_key != NULL) {
-    return verify_private_callback();
+    evp = evp_open_private(g_private_key);
+
+    if (evp == NULL) {
+      fprintf(stderr, "Could not open private key\n");
+      error_all_print("verify_callback");
+      goto error_evp;
+    }
+
+    return verify_internal_callback(evp);
   }
 
   fprintf(stderr, "no key specified, neither -priv nor -pub\n");
   return 1;
+error_evp:
+  EVP_PKEY_free(evp);
+  return 1;
 }
 
 int generate_callback() {
-  if (!rsa_generate_keys("key.pem", "key.pub")) {
-    fprintf(stderr, "Key generation failed\n");
-    return 1;
-  }
-
   return 0;
 }
 
@@ -321,7 +268,7 @@ int main(int argc, char* argv[])
     g_in_fp = fopen(g_in, "rb");
 
     if (g_in_fp == NULL) {
-      error_all_print("fopen");
+      error_all_print("main");
       goto exit_cleanup;
     }
   }
@@ -330,7 +277,7 @@ int main(int argc, char* argv[])
     g_out_fp = fopen(g_out, "wb");
 
     if (g_out_fp == NULL) {
-      error_all_print("fopen");
+      error_all_print("main");
       goto exit_cleanup;
     }
   }
@@ -339,7 +286,7 @@ int main(int argc, char* argv[])
     g_signature_fp = fopen(g_signature, "rb");
 
     if (g_signature_fp == NULL) {
-      error_all_print("fopen");
+      error_all_print("main");
       goto exit_cleanup;
     }
   }
