@@ -161,7 +161,8 @@ int verify_callback() {
     return verify_internal_callback(evp);
   }
 
-  fprintf(stderr, "no key specified, neither -priv nor -pub\n");
+  fprintf(stderr, "public (-pub) or private (-priv) key must be specified\n");
+  verify_callback_help();
   return 1;
 error_evp:
   EVP_PKEY_free(evp);
@@ -213,6 +214,7 @@ int main(int argc, char* argv[])
   }
   
   if (c == NULL) {
+    printf("no such comnand '%s'\n", command);
     exit_usage();
   }
 
