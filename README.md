@@ -5,8 +5,8 @@ Challenge Response Tool
 
 The general idea is dead simple.
 
-    #> cr sign -I ~/.ssh/id_rsa -i data.txt -o signature.txt
-    #> cr verify -I ~/.ssh/id_rsa -i data.txt -s signature.txt
+    #> cr sign -priv ~/.ssh/id_rsa -in data.txt -out signature.txt
+    #> cr verify -priv ~/.ssh/id_rsa -in data.txt -sig signature.txt
     VERIFY SUCCESS
 
 *cr* requires openssl, it's built using make.
