@@ -308,7 +308,7 @@ int verify_callback() {
   EVP_PKEY* evp = NULL;
   int ret;
 
-  if (g_signature == NULL) {
+  if (g_signature_fp == NULL) {
     fprintf(stderr, "signature: must be defined\n");
     verify_callback_help();
     return 1;
