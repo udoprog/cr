@@ -29,8 +29,8 @@ extern const char* EVP_DIGEST_TYPE_NAMES[];
 extern const int EVP_DIGEST_TYPE_SIZES[];
 extern const int EVP_DIGEST_TYPE_COUNT;
 
-int evp_open_private(EVP_PKEY*, const char* path, password_callback callback);
-int evp_open_public(EVP_PKEY*, const char* path, password_callback callback);
+int evp_open_private(EVP_PKEY**, const char* path, password_callback callback);
+int evp_open_public(EVP_PKEY**, const char* path, password_callback callback);
 
 int sha1_digest_fp(FILE* fp, unsigned char* digest);
 int evp_sign(EVP_PKEY*, enum EVP_DIGEST_TYPE, FILE*, string*);

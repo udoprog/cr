@@ -35,7 +35,7 @@ int pass_cb(char *buf, int size, int rwflag, void *u)
   return len;
 }
 
-int evp_open_private(EVP_PKEY* evp, const char* path, password_callback callback)
+int evp_open_private(EVP_PKEY** evp, const char* path, password_callback callback)
 {
   FILE* path_fp;
   password_request req;
@@ -50,7 +50,9 @@ int evp_open_private(EVP_PKEY* evp, const char* path, password_callback callback
   req.path = path;
   req.callback = callback;
 
-  if (!PEM_read_PrivateKey(path_fp, &evp, pass_cb, &req)) {
+  *evp = PEM_read_PrivateKey(path_fp, NULL, pass_cb, &req);
+
+  if (*evp == NULL) {
     fclose(path_fp);
     return 0;
   }
@@ -59,7 +61,7 @@ int evp_open_private(EVP_PKEY* evp, const char* path, password_callback callback
   return 1;
 }
 
-int evp_open_public(EVP_PKEY* evp, const char* path, password_callback callback)
+int evp_open_public(EVP_PKEY** evp, const char* path, password_callback callback)
 {
   FILE* path_fp;
   password_request req;
@@ -74,7 +76,9 @@ int evp_open_public(EVP_PKEY* evp, const char* path, password_callback callback)
   req.path = path;
   req.callback = callback;
 
-  if (!PEM_read_PrivateKey(path_fp, &evp, pass_cb, &req)) {
+  *evp = PEM_read_PUBKEY(path_fp, NULL, pass_cb, &req);
+
+  if (*evp == NULL) {
     fclose(path_fp);
     return 0;
   }
@@ -119,26 +123,6 @@ int digest_fp(FILE* fp, enum EVP_DIGEST_TYPE type, unsigned char* digest, unsign
   }
 
   EVP_DigestFinal(&ctx, digest, digest_length);
-  return 1;
-}
-
-int evp_sign_dsa(DSA* dsa, enum EVP_DIGEST_TYPE type, const unsigned char* digest, unsigned int digest_length, string* s)
-{
-  unsigned int tmp_size;
-  unsigned char* tmp_base;
-
-  tmp_base = malloc(DSA_size(dsa));
-
-  if (!DSA_sign(0, digest, digest_length, tmp_base, &tmp_size, dsa)) {
-    free(tmp_base);
-    return 0;
-  }
-
-  string_append(s, tmp_base, tmp_size);
-
-  assert(string_size(s) == tmp_size);
-
-  free(tmp_base);
   return 1;
 }
 
@@ -200,47 +184,41 @@ int evp_sign(EVP_PKEY* evp, enum EVP_DIGEST_TYPE type, FILE* fp, string* s)
   return ret;
 }
 
-int evp_verify_dsa(DSA* dsa, enum EVP_DIGEST_TYPE type, const unsigned char* digest, unsigned int digest_length, string* s)
+int evp_verify_internal(EVP_PKEY* evp, EVP_MD_CTX* ctx, enum EVP_DIGEST_TYPE type, const unsigned char* digest, unsigned int digest_length, string* s)
 {
-  int r;
-
-  r = DSA_verify(0, digest, digest_length, s->base, s->size, dsa);
-
-  switch (r)
-  {
-  case 1:
-    return EVP_SUCCESS;
-  case -1:
-    return EVP_ERROR;
-  default:
-    return EVP_FAILURE;
-  }
-}
-
-int evp_verify_rsa(RSA* rsa, enum EVP_DIGEST_TYPE type, const unsigned char* digest, unsigned int digest_length, string* s)
-{
-  int verify_type;
+  const EVP_MD* md;
   int r;
 
   switch (type) {
   case evp_sha1:
-    verify_type = NID_sha1;
+    md = EVP_sha1();
     break;
   case evp_md5:
-    verify_type = NID_md5;
+    md = EVP_md5();
     break;
   default:
     return EVP_ERROR;
   }
 
-  r = RSA_verify(verify_type, digest, digest_length, s->base, s->size, rsa);
+  EVP_MD_CTX_init(ctx);
 
-  switch (r)
-  {
-  case 1:
-    return EVP_SUCCESS;
-  default:
+  if (!EVP_VerifyInit(ctx, md)) {
+    return EVP_ERROR;
+  }
+
+  if (!EVP_VerifyUpdate(ctx, digest, digest_length)) {
+    return EVP_ERROR;
+  }
+
+  r = EVP_VerifyFinal(ctx, string_base(s), string_size(s), evp);
+
+  switch (r) {
+  case -1:
+    return EVP_ERROR;
+  case 0:
     return EVP_FAILURE;
+  default:
+    return EVP_SUCCESS;
   }
 }
 
@@ -253,6 +231,12 @@ int evp_verify(EVP_PKEY* evp, enum EVP_DIGEST_TYPE type, FILE* fp, string* s)
 {
   unsigned char digest[SHA_DIGEST_LENGTH];
   unsigned int digest_length = 0;
+  int ret;
+  EVP_MD_CTX* ctx = NULL;
+
+  if (evp == NULL) {
+    return EVP_ERROR;
+  }
 
   if (EVP_PKEY_type(evp->type) == EVP_PKEY_DSA && type != evp_sha1) {
     return EVP_ERROR;
@@ -262,12 +246,12 @@ int evp_verify(EVP_PKEY* evp, enum EVP_DIGEST_TYPE type, FILE* fp, string* s)
     return EVP_ERROR;
   }
 
-  switch (EVP_PKEY_type(evp->type)) {
-    case EVP_PKEY_DSA:
-      return evp_verify_dsa(EVP_PKEY_get1_DSA(evp), type, digest, digest_length, s);
-    case EVP_PKEY_RSA:
-      return evp_verify_rsa(EVP_PKEY_get1_RSA(evp), type, digest, digest_length, s);
-  }
+  ctx = EVP_MD_CTX_create();
 
-  return -1;
+  ret = evp_verify_internal(evp, ctx, type, digest, digest_length, s);
+
+  EVP_MD_CTX_cleanup(ctx);
+  EVP_MD_CTX_destroy(ctx);
+
+  return ret;
 }

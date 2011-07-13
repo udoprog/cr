@@ -86,6 +86,7 @@ int read_password(const char* path, char* buf, int size)
   }
 
   memcpy(buf, pass, len);
+  free(pass);
   return len;
 }
 
@@ -109,9 +110,8 @@ int sign_callback() {
   }
 
   s = string_new();
-  evp = EVP_PKEY_new();
 
-  if (!evp_open_private(evp, g_private_key, &read_password)) {
+  if (!evp_open_private(&evp, g_private_key, &read_password)) {
     fprintf(stderr, "could not open private key\n");
     error_all_print("sign_callback");
     goto error;
@@ -157,7 +157,7 @@ error:
   return 1;
 }
 
-int verify_internal_callback_ref(EVP_PKEY* evp, FILE* fp, string* ref, enum EVP_DIGEST_TYPE type)
+int verify_internal_callback_ref(EVP_PKEY* evp, enum EVP_DIGEST_TYPE type, FILE* fp, string* ref)
 {
   int r;
 
@@ -245,10 +245,9 @@ int verify_internal_callback(EVP_PKEY* evp) {
 
   ref = string_new_p(s_ref, i_ref);
 
+  ret = verify_internal_callback_ref(evp, type, fp, ref);
+
   free(s_ref);
-
-  ret = verify_internal_callback_ref(evp, fp, ref, type);
-
   string_free(ref);
   return ret;
 }
@@ -263,16 +262,14 @@ int verify_callback() {
     return 1;
   }
 
-  evp = EVP_PKEY_new();
-
   if (g_public_key != NULL) {
-    if (!evp_open_public(evp, g_public_key, &read_password)) {
+    if (!evp_open_public(&evp, g_public_key, &read_password)) {
       fprintf(stderr, "could not open key\n");
       goto error;
     }
   }
   else if (g_private_key != NULL) {
-    if (!evp_open_private(evp, g_private_key, &read_password)) {
+    if (!evp_open_private(&evp, g_private_key, &read_password)) {
       fprintf(stderr, "could not open key\n");
       goto error;
     }

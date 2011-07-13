@@ -63,12 +63,12 @@ int string_inc(string* s)
 
 int string_resize(string* s, int size)
 {
+  int            tmp_base_size;
+  unsigned char* tmp_base;
+
   if (size < s->_bss) {
     return 0;
   }
-
-  int            tmp_base_size;
-  unsigned char* tmp_base;
   
   tmp_base_size = s->_bss * 2;
   s->_bsi += 1;
