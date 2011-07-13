@@ -5,7 +5,9 @@
 
 #define BASE64_INITIAL_BUFFER 128
 
-int base64_fencode(FILE*, const unsigned char*, int);
-int base64_fdecode(FILE*, unsigned char**, int*);
+#include "string.h"
+
+int base64_fencode(FILE*, string*);
+int base64_fdecode(FILE*, string*);
 
 #endif /*_BASE64_H_*/

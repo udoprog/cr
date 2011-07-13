@@ -142,7 +142,7 @@ int sign_callback() {
     goto error;
   }
 
-  if (!base64_fencode(fp_out, string_base(s), string_size(s))) {
+  if (!base64_fencode(fp_out, s)) {
     error_all_print("sign_callback");
     goto error;
   }
@@ -215,8 +215,6 @@ int extract_type(FILE* fp, enum EVP_DIGEST_TYPE* type)
 
 int verify_internal_callback(EVP_PKEY* evp) {
   FILE* fp = stdin;
-  unsigned char* s_ref = NULL;
-  int i_ref = 0;
   int ret;
 
   enum EVP_DIGEST_TYPE type;
@@ -238,16 +236,15 @@ int verify_internal_callback(EVP_PKEY* evp) {
     return 1;
   }
 
-  if (!base64_fdecode(g_signature_fp, &s_ref, &i_ref)) {
+  ref = string_new();
+
+  if (!base64_fdecode(g_signature_fp, ref)) {
     error_all_print("verify_internal_callback");
     return 1;
   }
 
-  ref = string_new_p(s_ref, i_ref);
-
   ret = verify_internal_callback_ref(evp, type, fp, ref);
 
-  free(s_ref);
   string_free(ref);
   return ret;
 }
