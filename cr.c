@@ -253,7 +253,7 @@ int verify_internal_callback(EVP_PKEY* evp) {
 }
 
 int verify_callback() {
-  EVP_PKEY* evp;
+  EVP_PKEY* evp = NULL;
   int ret;
 
   if (g_signature == NULL) {
