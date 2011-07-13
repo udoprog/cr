@@ -122,7 +122,6 @@ int sign_callback() {
 
   if (!evp_open_private(&evp, g_private_key, &read_password)) {
     fprintf(stderr, "could not open private key\n");
-    error_all_print("sign_callback");
     goto error;
   }
 
@@ -139,7 +138,6 @@ int sign_callback() {
   }
 
   if (!evp_sign(evp, type, fp_in, s)) {
-    error_all_print("sign_callback");
     goto error;
   }
 
@@ -154,7 +152,6 @@ int sign_callback() {
     }
 
     if (!base64_fencode(fp_out, s)) {
-      error_all_print("sign_callback");
       goto error;
     }
 
@@ -164,7 +161,7 @@ int sign_callback() {
     break;
   case binary:
     if (fwrite(string_base(s), string_size(s), 1, fp_out) != 1) {
-      error_all_print("sign_callback");
+      goto error;
     }
     break;
   }
@@ -174,6 +171,7 @@ int sign_callback() {
   return 0;
 
 error:
+  error_all_print("sign_callback");
   EVP_PKEY_free(evp);
   string_free(s);
   return 1;
@@ -271,37 +269,33 @@ int verify_internal_callback(EVP_PKEY* evp) {
   switch (g_outform) {
   case portable:
     if (!extract_type(g_signature_fp, &type)) {
-      error_all_print("verify_internal_callback");
-      string_free(ref);
-      return 1;
+      goto error;
     }
 
     if (!base64_fdecode(g_signature_fp, ref)) {
-      error_all_print("verify_internal_callback");
-      string_free(ref);
-      return 1;
+      goto error;
     }
     break;
   case binary:
     if (!binary_read(g_signature_fp, ref)) {
-      error_all_print("verify_internal_callback");
-      string_free(ref);
-      return 1;
+      goto error;
     }
     break;
   }
 
   if (g_digest != evp_none && type != g_digest) {
     error_push(ERROR_DIGEST_TYPE_MISMATCH);
-    error_all_print("verify_internal_callback");
-    string_free(ref);
-    return 1;
+    goto error;
   }
 
   ret = verify_internal_callback_ref(evp, type, fp, ref);
 
   string_free(ref);
   return ret;
+error:
+  error_all_print("verify_internal_callback");
+  string_free(ref);
+  return 1;
 }
 
 int verify_callback() {
