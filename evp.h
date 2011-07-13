@@ -5,15 +5,35 @@
 
 #define EVP_IO_BUFFER_SIZE 4096
 
-EVP_PKEY* evp_open_private(const char* path);
-EVP_PKEY* evp_open_public(const char* path);
+#define EVP_SHA1 1
+#define EVP_MD5  2
+
+#define EVP_SUCCESS 1
+#define EVP_FAILURE 0
+#define EVP_ERROR -1
+
+typedef int (*password_callback) (const char* path, char* buf, int size);
+
+typedef struct {
+  const char* path;
+  password_callback callback;
+} password_request;
+
+enum EVP_DIGEST_TYPE {
+  evp_none = -1,
+  evp_sha1 = 0,
+  evp_md5  = 1
+};
+
+extern const char* EVP_DIGEST_TYPE_NAMES[];
+extern const int EVP_DIGEST_TYPE_SIZES[];
+extern const int EVP_DIGEST_TYPE_COUNT;
+
+int evp_open_private(EVP_PKEY*, const char* path, password_callback callback);
+int evp_open_public(EVP_PKEY*, const char* path, password_callback callback);
 
 int sha1_digest_fp(FILE* fp, unsigned char* digest);
-int evp_sign_dsa(DSA* dsa, const unsigned char* digest, unsigned int digest_length, string* s);
-int evp_sign_rsa(RSA* rsa, const unsigned char* digest, unsigned int digest_length, string* s);
-int evp_sign(EVP_PKEY* evp, FILE* fp, string* s);
-int evp_verify_dsa(DSA* dsa, FILE* fp, string* s);
-int evp_verify_rsa(RSA* rsa, FILE* fp, string* s);
-int evp_verify(EVP_PKEY* evp, FILE* fp, string* s);
+int evp_sign(EVP_PKEY*, enum EVP_DIGEST_TYPE, FILE*, string*);
+int evp_verify(EVP_PKEY*, enum EVP_DIGEST_TYPE, FILE*, string*);
 
 #endif /* _EVP_H_ */

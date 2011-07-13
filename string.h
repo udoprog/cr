@@ -21,6 +21,7 @@ int string_ncmp(string*, const unsigned char*, int);
 
 int string_append(string*, const unsigned char*, int);
 int string_inc(string*);
+int string_resize(string*, int);
 int string_set(string*, const unsigned char*, int);
 int string_set_offset(string*, const unsigned char*, int, int);
 void string_hexdump(string*, FILE*);

@@ -8,61 +8,121 @@
 #include "string.h"
 #include "evp.h"
 
-EVP_PKEY* evp_open_private(const char* path)
+const char* EVP_DIGEST_TYPE_NAMES[] = {
+  "SHA1",
+  "MD5"
+};
+
+const int EVP_DIGEST_TYPE_SIZES[] = {
+  4,
+  3
+};
+
+const int EVP_DIGEST_TYPE_COUNT = 2;
+
+int pass_cb(char *buf, int size, int rwflag, void *u)
+{
+  int len;
+
+  password_request* req = (password_request*)u;
+
+  len = req->callback(req->path, buf, size);
+
+  if (len <= 0) {
+    return 0;
+  }
+
+  return len;
+}
+
+int evp_open_private(EVP_PKEY* evp, const char* path, password_callback callback)
 {
   FILE* path_fp;
+  password_request req;
 
   path_fp = fopen(path, "rb");
 
   if (path_fp == NULL)
   {
-    return NULL;
+    return 0;
   }
 
-  return PEM_read_PrivateKey(path_fp, NULL, NULL, NULL);
+  req.path = path;
+  req.callback = callback;
+
+  if (!PEM_read_PrivateKey(path_fp, &evp, pass_cb, &req)) {
+    fclose(path_fp);
+    return 0;
+  }
+
+  fclose(path_fp);
+  return 1;
 }
 
-EVP_PKEY* evp_open_public(const char* path)
+int evp_open_public(EVP_PKEY* evp, const char* path, password_callback callback)
 {
   FILE* path_fp;
+  password_request req;
 
   path_fp = fopen(path, "rb");
 
   if (path_fp == NULL)
   {
-    return NULL;
+    return 0;
   }
 
-  return PEM_read_PUBKEY(path_fp, NULL, NULL, NULL);
+  req.path = path;
+  req.callback = callback;
+
+  if (!PEM_read_PrivateKey(path_fp, &evp, pass_cb, &req)) {
+    fclose(path_fp);
+    return 0;
+  }
+
+  fclose(path_fp);
+  return 1;
 }
 
-int sha1_digest_fp(FILE* fp, unsigned char* digest)
+int digest_fp(FILE* fp, enum EVP_DIGEST_TYPE type, unsigned char* digest, unsigned int* digest_length)
 {
   char buffer[EVP_IO_BUFFER_SIZE];
   size_t r;
+  const EVP_MD* md;
 
-  SHA_CTX ctx;
+  EVP_MD_CTX ctx;
+
+  EVP_MD_CTX_init(&ctx);
+
+  switch (type) {
+  case evp_sha1:
+    md = EVP_sha1();
+    break;
+  case evp_md5:
+    md = EVP_md5();
+    break;
+  default:
+    return 0;
+  }
+  
+  EVP_DigestInit(&ctx, md);
 
   fseek(fp, 0, SEEK_SET);
 
-  SHA1_Init(&ctx);
-  
   while (!feof(fp)) {
     r = fread(buffer, 1, EVP_IO_BUFFER_SIZE, fp);
 
     if (ferror(fp)) {
-      SHA1_Final(digest, &ctx);
       return 0;
     }
 
-    SHA1_Update(&ctx, buffer, (unsigned long)r);
+    EVP_DigestUpdate(&ctx, buffer, (unsigned long)r);
   }
 
-  SHA1_Final(digest, &ctx);
+  EVP_DigestFinal(&ctx, digest, digest_length);
   return 1;
 }
 
-int evp_sign_dsa(DSA* dsa, const unsigned char* digest, unsigned int digest_length, string* s)
+int evp_sign_dsa(DSA* dsa, enum EVP_DIGEST_TYPE type, const unsigned char* digest, unsigned int digest_length, string* s)
 {
   unsigned int tmp_size;
   unsigned char* tmp_base;
@@ -74,7 +134,7 @@ int evp_sign_dsa(DSA* dsa, const unsigned char* digest, unsigned int digest_leng
     return 0;
   }
 
-  string_set(s, tmp_base, tmp_size);
+  string_append(s, tmp_base, tmp_size);
 
   assert(string_size(s) == tmp_size);
 
@@ -82,129 +142,132 @@ int evp_sign_dsa(DSA* dsa, const unsigned char* digest, unsigned int digest_leng
   return 1;
 }
 
-int evp_sign_rsa(RSA* rsa, const unsigned char* digest, unsigned int digest_length, string* s)
+int evp_sign_internal(EVP_PKEY* evp, EVP_MD_CTX* ctx, enum EVP_DIGEST_TYPE type, const unsigned char* digest, unsigned int digest_length, string* s)
 {
-  unsigned int tmp_size;
-  unsigned char* tmp_base;
+  const EVP_MD* md;
 
-  tmp_base = malloc(RSA_size(rsa));
-
-  if (!RSA_sign(NID_sha1, digest, digest_length, tmp_base, &tmp_size, rsa)) {
-    free(tmp_base);
+  switch (type) {
+  case evp_sha1:
+    md = EVP_sha1();
+    break;
+  case evp_md5:
+    md = EVP_md5();
+    break;
+  default:
     return 0;
   }
 
-  string_set(s, tmp_base, tmp_size);
+  EVP_MD_CTX_init(ctx);
 
-  assert(string_size(s) == tmp_size);
+  if (!EVP_SignInit(ctx, md)) {
+    return 0;
+  }
 
-  free(tmp_base);
+  if (!EVP_SignUpdate(ctx, digest, digest_length)) {
+    return 0;
+  }
+
+  if (!EVP_SignFinal(ctx, string_base(s), &string_size(s), evp)) {
+    return 0;
+  }
+
   return 1;
 }
 
-int evp_sign(EVP_PKEY* evp, FILE* fp, string* s)
+int evp_sign(EVP_PKEY* evp, enum EVP_DIGEST_TYPE type, FILE* fp, string* s)
+{
+  unsigned char digest[EVP_MAX_MD_SIZE];
+  unsigned int digest_length = 0;
+  EVP_MD_CTX* ctx;
+  int ret;
+
+  if (EVP_PKEY_type(evp->type) == EVP_PKEY_DSA && type != evp_sha1) {
+    return 0;
+  }
+
+  if (!digest_fp(fp, type, digest, &digest_length)) {
+    return 0;
+  }
+
+  ctx = EVP_MD_CTX_create();
+  string_resize(s, EVP_PKEY_size(evp));
+
+  ret = evp_sign_internal(evp, ctx, type, digest, digest_length, s);
+
+  EVP_MD_CTX_cleanup(ctx);
+  EVP_MD_CTX_destroy(ctx);
+
+  return ret;
+}
+
+int evp_verify_dsa(DSA* dsa, enum EVP_DIGEST_TYPE type, const unsigned char* digest, unsigned int digest_length, string* s)
+{
+  int r;
+
+  r = DSA_verify(0, digest, digest_length, s->base, s->size, dsa);
+
+  switch (r)
+  {
+  case 1:
+    return EVP_SUCCESS;
+  case -1:
+    return EVP_ERROR;
+  default:
+    return EVP_FAILURE;
+  }
+}
+
+int evp_verify_rsa(RSA* rsa, enum EVP_DIGEST_TYPE type, const unsigned char* digest, unsigned int digest_length, string* s)
+{
+  int verify_type;
+  int r;
+
+  switch (type) {
+  case evp_sha1:
+    verify_type = NID_sha1;
+    break;
+  case evp_md5:
+    verify_type = NID_md5;
+    break;
+  default:
+    return EVP_ERROR;
+  }
+
+  r = RSA_verify(verify_type, digest, digest_length, s->base, s->size, rsa);
+
+  switch (r)
+  {
+  case 1:
+    return EVP_SUCCESS;
+  default:
+    return EVP_FAILURE;
+  }
+}
+
+/**
+ * returns -1 on error
+ * returns 0 on non-verified digest
+ * returns 1 on verified digest
+ */
+int evp_verify(EVP_PKEY* evp, enum EVP_DIGEST_TYPE type, FILE* fp, string* s)
 {
   unsigned char digest[SHA_DIGEST_LENGTH];
-  unsigned int digest_length = SHA_DIGEST_LENGTH;
+  unsigned int digest_length = 0;
 
-  if (!sha1_digest_fp(fp, digest)) {
-    return 0;
+  if (EVP_PKEY_type(evp->type) == EVP_PKEY_DSA && type != evp_sha1) {
+    return EVP_ERROR;
+  }
+
+  if (!digest_fp(fp, type, digest, &digest_length)) {
+    return EVP_ERROR;
   }
 
   switch (EVP_PKEY_type(evp->type)) {
     case EVP_PKEY_DSA:
-      return evp_sign_dsa(EVP_PKEY_get1_DSA(evp), digest, digest_length, s);
+      return evp_verify_dsa(EVP_PKEY_get1_DSA(evp), type, digest, digest_length, s);
     case EVP_PKEY_RSA:
-      return evp_sign_rsa(EVP_PKEY_get1_RSA(evp), digest, digest_length, s);
+      return evp_verify_rsa(EVP_PKEY_get1_RSA(evp), type, digest, digest_length, s);
   }
 
-  return 0;
+  return -1;
 }
-
-int evp_verify_dsa(DSA* dsa, FILE* fp, string* s)
-{
-  unsigned char digest[SHA_DIGEST_LENGTH];
-
-  if (!sha1_digest_fp(fp, digest)) {
-    return 0;
-  }
-
-  if (DSA_verify(0, digest, SHA_DIGEST_LENGTH, s->base, s->size, dsa)) {
-    return 1;
-  }
-
-  return 0;
-}
-
-int evp_verify_rsa(RSA* rsa, FILE* fp, string* s)
-{
-  unsigned char digest[SHA_DIGEST_LENGTH];
-
-  if (!sha1_digest_fp(fp, digest)) {
-    return 0;
-  }
-
-  if (RSA_verify(NID_sha1, digest, SHA_DIGEST_LENGTH, s->base, s->size, rsa)) {
-    return 1;
-  }
-
-  return 0;
-}
-
-int evp_verify(EVP_PKEY* evp, FILE* fp, string* s)
-{
-  switch (EVP_PKEY_type(evp->type)) {
-    case EVP_PKEY_DSA:
-      return evp_verify_dsa(EVP_PKEY_get1_DSA(evp), fp, s);
-    case EVP_PKEY_RSA:
-      return evp_verify_rsa(EVP_PKEY_get1_RSA(evp), fp, s);
-  }
-
-  return 0;
-}
-
-/*
-int main(int argc, char* argv[]) {
-  EVP_PKEY* evp_priv = evp_open_private("id_rsa");
-  EVP_PKEY* evp_pub = evp_open_private("id_rsa");
-
-  if (evp_priv == NULL) {
-    fprintf(stderr, "Failed to open evp key\n");
-    return 1;
-  }
-
-  if (evp_pub == NULL) {
-    fprintf(stderr, "Failed to open evp key\n");
-    return 1;
-  }
-
-  string* s = string_new();
-
-  FILE* passwd = fopen("/etc/passwd", "rb");
-
-  if (!evp_sign(evp_priv, passwd, s)) {
-    printf("Failed to sign\n");
-  }
-
-  if (evp_verify(evp_pub, passwd, s)) {
-    printf("Signature is valid\n");
-  }
-  else {
-    printf("Signature is invalid\n");
-  }
-
-  long code;
-  char buffer[1024];
-
-  ERR_load_crypto_strings();
-
-  while ((code = ERR_get_error()) != 0) {
-    ERR_error_string_n(code, buffer, 1024);
-    fprintf(stderr, "openssl:%s\n", buffer);
-  }
-
-  string_free(s);
-  EVP_PKEY_free(evp_priv);
-  EVP_PKEY_free(evp_pub);
-}
-*/

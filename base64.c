@@ -27,13 +27,20 @@ int base64_fencode(FILE* fp, const unsigned char* source, int size)
 
   bio = BIO_push(b64, bio);
 
+  BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
+
   if (BIO_write(bio, source, size) <= 0) {
     error_all_print("BIO_write");
     goto exit_error;
   }
 
-  BIO_flush(bio);
+  if (!BIO_flush(bio)) {
+    error_all_print("BUI_flush");
+    goto exit_error;
+  }
+
   BIO_free_all(bio);
+
   return TRUE;
 
 exit_error:
@@ -63,6 +70,8 @@ int base64_fdecode(FILE* fp, unsigned char** out, int* size)
   b64 = BIO_new(BIO_f_base64());
   bio = BIO_new_fp(fp, BIO_NOCLOSE);
   bio = BIO_push(b64, bio);
+
+  BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
 
   tmp = malloc(c);
 

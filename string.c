@@ -41,7 +41,8 @@ void string_free(string* s) {
   free(s);
 }
 
-int string_inc(string* s) {
+int string_inc(string* s)
+{
   int            tmp_base_size;
   unsigned char* tmp_base;
   
@@ -56,6 +57,35 @@ int string_inc(string* s) {
   s->base = tmp_base;
   s->_bss = tmp_base_size;
   s->_bsi += 1;
+
+  return tmp_base_size;
+}
+
+int string_resize(string* s, int size)
+{
+  if (size < s->_bss) {
+    return 0;
+  }
+
+  int            tmp_base_size;
+  unsigned char* tmp_base;
+  
+  tmp_base_size = s->_bss * 2;
+  s->_bsi += 1;
+
+  while (tmp_base_size < size) {
+    tmp_base_size = tmp_base_size * 2;
+    s->_bsi += 1;
+  }
+
+  tmp_base = realloc(s->base, tmp_base_size);
+
+  if (tmp_base == NULL) {
+    return 0;
+  }
+
+  s->base = tmp_base;
+  s->_bss = tmp_base_size;
 
   return tmp_base_size;
 }

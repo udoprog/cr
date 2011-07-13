@@ -16,7 +16,12 @@ const char* g_error_strings[] = {
   "public key error",
   "encryption error",
   "hash size mismatch",
-  "unsupported algorithm"
+  "unsupported algorithm",
+  "reached end-of-file",
+  "read error",
+  "signature digest type not found",
+  "dsa only supports sha1 digests",
+  "digest type specified does not match the one from file"
 };
 
 void error_all_print(const char* func)

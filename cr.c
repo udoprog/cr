@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "cr.h"
 #include "error.h"
@@ -10,22 +11,32 @@
 #include "string.h"
 #include "evp.h"
 
-char* g_private_key    = NULL;
-char* g_public_key     = NULL;
-char* g_signature      = NULL;
-int   g_print_settings = 0;
-int   g_print_help     = 0;
-char* g_in             = NULL;
-FILE* g_in_fp          = NULL;
-char* g_out            = NULL;
-FILE* g_out_fp         = NULL;
-FILE* g_signature_fp   = NULL;
+#include <openssl/conf.h>
+#include <openssl/err.h>
+#include <openssl/engine.h>
+
+char* g_private_key           = NULL;
+char* g_public_key            = NULL;
+char* g_signature             = NULL;
+char* g_in                    = NULL;
+char* g_out                   = NULL;
+FILE* g_in_fp                 = NULL;
+FILE* g_out_fp                = NULL;
+FILE* g_signature_fp          = NULL;
+int   g_print_settings        = 0;
+int   g_print_help            = 0;
+int   g_failfast              = 0;
+enum EVP_DIGEST_TYPE g_digest = evp_none;
+
+#define xfree(var) if (var != NULL) { free(var); var=NULL; }
+#define xfclose(var) if (var != NULL) { fclose(var); var=NULL; }
 
 int exit_usage() {
   printf("Usage: cr <command> [opts]\n");
   printf("commands: sign, verify\n");
-  printf(" -help:  Print help text about <command>\n");
-  printf(" -debug: Print debug information\n");
+  printf(" -help:     Print help text about <command>\n");
+  printf(" -debug:    Print debug information\n");
+  printf(" -failfast: Never prompt for password, fail instead\n");
   exit(1);
 }
 
@@ -46,6 +57,38 @@ int verify_callback_help() {
   return 0;
 }
 
+int read_password(const char* path, char* buf, int size)
+{
+  char prompt[1025];
+  char* pass;
+  int len;
+
+  if (g_failfast) {
+    return 0;
+  }
+
+  if (snprintf(prompt, 1024, "Enter password to open '%s':", path) < 0) {
+    fprintf(stderr, "failed to format prompt\n");
+    return 0;
+  }
+
+  pass = getpass(prompt);
+
+  if (pass == NULL) {
+    fprintf(stderr, "failed to retrieve password\n");
+    return 0;
+  }
+
+  len = strlen(pass);
+
+  if (len > size) {
+    len = size;
+  }
+
+  memcpy(buf, pass, len);
+  return len;
+}
+
 int generate_callback_help() {
   printf("Usage: cr generate\n");
   return 0;
@@ -55,8 +98,9 @@ int sign_callback() {
   FILE* fp_in = stdin;
   FILE* fp_out = stdout;
 
-  string* s;
-  EVP_PKEY* evp;
+  string* s = NULL;
+  EVP_PKEY* evp = NULL;
+  enum EVP_DIGEST_TYPE type = g_digest;
 
   if (g_private_key == NULL) {
     fprintf(stderr, "private_key: must be defined\n");
@@ -64,11 +108,13 @@ int sign_callback() {
     return 1;
   }
 
-  evp = evp_open_private(g_private_key);
+  s = string_new();
+  evp = EVP_PKEY_new();
 
-  if (evp == NULL) {
+  if (!evp_open_private(evp, g_private_key, &read_password)) {
     fprintf(stderr, "could not open private key\n");
-    return 1;
+    error_all_print("sign_callback");
+    goto error;
   }
 
   if (g_in_fp != NULL) {
@@ -79,19 +125,91 @@ int sign_callback() {
     fp_out = g_out_fp;
   }
 
-  s = string_new();
+  if (type == evp_none) {
+    type = evp_sha1;
+  }
 
-  if (!evp_sign(evp, fp_in, s)) {
-    string_free(s);
-    return 1;
+  if (!evp_sign(evp, type, fp_in, s)) {
+    error_all_print("sign_callback");
+    goto error;
+  }
+
+  if (fwrite(EVP_DIGEST_TYPE_NAMES[type], EVP_DIGEST_TYPE_SIZES[type], 1, fp_out) != 1) {
+    goto error;
+  }
+
+  if (fwrite(":", 1, 1, fp_out) != 1) {
+    goto error;
   }
 
   if (!base64_fencode(fp_out, string_base(s), string_size(s))) {
-    string_free(s);
+    error_all_print("sign_callback");
+    goto error;
+  }
+
+  EVP_PKEY_free(evp);
+  string_free(s);
+  return 0;
+
+error:
+  EVP_PKEY_free(evp);
+  string_free(s);
+  return 1;
+}
+
+int verify_internal_callback_ref(EVP_PKEY* evp, FILE* fp, string* ref, enum EVP_DIGEST_TYPE type)
+{
+  int r;
+
+  r = evp_verify(evp, type, fp, ref);
+
+  switch (r)
+  {
+  case EVP_ERROR:
+    error_all_print("verify_internal_callback");
+    printf("VERIFY ERROR\n");
+    return 2;
+  case EVP_FAILURE:
+    printf("VERIFY FAILURE\n");
     return 1;
   }
 
-  string_free(s);
+  printf("VERIFY SUCCESS\n");
+  return 0;
+}
+
+int extract_type(FILE* fp, enum EVP_DIGEST_TYPE* type)
+{
+  char buffer[16];
+  int buffer_size;
+  int i;
+  int c;
+
+  buffer_size = 0;
+
+  while ((c = fgetc(fp)) != ':') {
+    if (c == EOF) {
+      error_push(ERROR_EOF);
+      return 0;
+    }
+
+    buffer[buffer_size++] = (char)c;
+  }
+
+  for (i = 0; i < EVP_DIGEST_TYPE_COUNT; i++) {
+    int current_size = EVP_DIGEST_TYPE_SIZES[i];
+
+    if (current_size != buffer_size) {
+      continue;
+    }
+
+    if (strncmp(buffer, EVP_DIGEST_TYPE_NAMES[i], current_size) == 0) {
+      *type = i;
+      return 1;
+    }
+  }
+
+  error_push(ERROR_NOTFOUND);
   return 0;
 }
 
@@ -99,6 +217,9 @@ int verify_internal_callback(EVP_PKEY* evp) {
   FILE* fp = stdin;
   unsigned char* s_ref = NULL;
   int i_ref = 0;
+  int ret;
+
+  enum EVP_DIGEST_TYPE type;
 
   string* ref;
 
@@ -106,30 +227,35 @@ int verify_internal_callback(EVP_PKEY* evp) {
     fp = g_in_fp;
   }
 
+  if (!extract_type(g_signature_fp, &type)) {
+    error_all_print("verify_internal_callback");
+    return 1;
+  }
+
+  if (g_digest != evp_none && type != g_digest) {
+    error_push(ERROR_DIGEST_TYPE_MISMATCH);
+    error_all_print("verify_internal_callback");
+    return 1;
+  }
+
   if (!base64_fdecode(g_signature_fp, &s_ref, &i_ref)) {
-    goto error_evp;
+    error_all_print("verify_internal_callback");
+    return 1;
   }
 
   ref = string_new_p(s_ref, i_ref);
 
-  if (!evp_verify(evp, fp, ref)) {
-    goto error_ref;
-  }
+  free(s_ref);
 
-  printf("VERIFY SUCCESS\n");
+  ret = verify_internal_callback_ref(evp, fp, ref, type);
 
   string_free(ref);
-  EVP_PKEY_free(evp);
-  return 0;
-error_ref:
-  string_free(ref);
-error_evp:
-  EVP_PKEY_free(evp);
-  return 1;
+  return ret;
 }
 
 int verify_callback() {
   EVP_PKEY* evp;
+  int ret;
 
   if (g_signature == NULL) {
     fprintf(stderr, "signature: must be defined\n");
@@ -137,34 +263,30 @@ int verify_callback() {
     return 1;
   }
 
+  evp = EVP_PKEY_new();
+
   if (g_public_key != NULL) {
-    evp = evp_open_public(g_public_key);
-
-    if (evp == NULL) {
-      fprintf(stderr, "Could not open public key\n");
-      error_all_print("verify_callback");
-      goto error_evp;
+    if (!evp_open_public(evp, g_public_key, &read_password)) {
+      fprintf(stderr, "could not open key\n");
+      goto error;
     }
-
-    return verify_internal_callback(evp);
+  }
+  else if (g_private_key != NULL) {
+    if (!evp_open_private(evp, g_private_key, &read_password)) {
+      fprintf(stderr, "could not open key\n");
+      goto error;
+    }
+  }
+  else {
+    fprintf(stderr, "public (-pub) or private (-priv) key must be specified\n");
+    verify_callback_help();
+    goto error;
   }
 
-  if (g_private_key != NULL) {
-    evp = evp_open_private(g_private_key);
-
-    if (evp == NULL) {
-      fprintf(stderr, "Could not open private key\n");
-      error_all_print("verify_callback");
-      goto error_evp;
-    }
-
-    return verify_internal_callback(evp);
-  }
-
-  fprintf(stderr, "public (-pub) or private (-priv) key must be specified\n");
-  verify_callback_help();
-  return 1;
-error_evp:
+  ret = verify_internal_callback(evp);
+  EVP_PKEY_free(evp);
+  return ret;
+error:
   EVP_PKEY_free(evp);
   return 1;
 }
@@ -197,6 +319,8 @@ int main(int argc, char* argv[])
   command_callback help_c = NULL;
   const struct command_entry* entry = NULL;
   int command_index = 0;
+
+  OpenSSL_add_all_algorithms();
 
   if (argc < 2) {
     exit_usage();
@@ -242,6 +366,15 @@ int main(int argc, char* argv[])
       else if (strcmp(argv[i], "-out") == 0) {
         g_out = strdup(get_arg(i, argc, argv));
         i += 1;
+      }
+      else if (strcmp(argv[i], "-failfast") == 0) {
+        g_failfast = 1;
+      }
+      else if (strcmp(argv[i], "-sha1") == 0) {
+        g_digest = evp_sha1;
+      }
+      else if (strcmp(argv[i], "-md5") == 0) {
+        g_digest = evp_md5;
       }
       else if (strcmp(argv[i], "-debug") == 0) {
         g_print_settings = 1;
@@ -300,17 +433,24 @@ int main(int argc, char* argv[])
   ret = c();
 
 exit_cleanup:
-  if (g_in_fp != NULL) {
-    fclose(g_in_fp);
-  }
+  xfclose(g_in_fp);
+  xfclose(g_out_fp);
+  xfclose(g_signature_fp);
 
-  if (g_out_fp != NULL) {
-    fclose(g_out_fp);
-  }
+  xfree(g_private_key);
+  xfree(g_public_key);
+  xfree(g_signature);
+  xfree(g_in);
+  xfree(g_out);
 
-  if (g_signature_fp != NULL) {
-    fclose(g_signature_fp);
-  }
+  CONF_modules_free();
+  CONF_modules_unload(1);
 
+  ERR_remove_state(0);
+  ERR_free_strings();
+
+  EVP_cleanup();
+  ENGINE_cleanup();
+  CRYPTO_cleanup_all_ex_data();
   return ret;
 }

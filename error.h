@@ -9,6 +9,11 @@
 #define ERROR_ENCRYPT 4
 #define ERROR_HASH_SIZE 5
 #define ERROR_UNSUPPORTED_ALGORITHM 6
+#define ERROR_EOF 7
+#define ERROR_READ 8
+#define ERROR_NOTFOUND 9
+#define ERROR_DSA_SHA1 10
+#define ERROR_DIGEST_TYPE_MISMATCH 11
 
 void          error_setup();
 void          error_push(long);
