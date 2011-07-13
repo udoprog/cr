@@ -21,6 +21,7 @@ char* g_signature             = NULL;
 char* g_in                    = NULL;
 char* g_out                   = NULL;
 char* g_data                  = NULL;
+char* g_sigdata               = NULL;
 FILE* g_in_fp                 = NULL;
 FILE* g_out_fp                = NULL;
 FILE* g_signature_fp          = NULL;
@@ -28,6 +29,7 @@ int   g_print_settings        = 0;
 int   g_print_help            = 0;
 int   g_failfast              = 0;
 int   g_data_length           = 0;
+int   g_sigdata_length        = 0;
 enum EVP_DIGEST_TYPE g_digest = evp_none;
 enum outform g_outform = portable;
 
@@ -419,6 +421,11 @@ int main(int argc, char* argv[])
         g_data_length = strlen(g_data);
         i += 1;
       }
+      else if (strcmp(argv[i], "-sigdata") == 0) {
+        g_sigdata = strdup(get_arg(i, argc, argv));
+        g_sigdata_length = strlen(g_sigdata);
+        i += 1;
+      }
       else if (strcmp(argv[i], "-failfast") == 0) {
         g_failfast = 1;
       }
@@ -482,7 +489,15 @@ int main(int argc, char* argv[])
     }
   }
 
-  if (g_signature != NULL) {
+  if (g_sigdata != NULL) {
+    g_signature_fp = fmemopen(g_sigdata, g_sigdata_length, "r");
+
+    if (g_signature_fp == NULL) {
+      error_all_print("main");
+      goto exit_cleanup;
+    }
+  }
+  else if (g_signature != NULL) {
     g_signature_fp = fopen(g_signature, "rb");
 
     if (g_signature_fp == NULL) {
@@ -508,6 +523,7 @@ exit_cleanup:
   xfree(g_in);
   xfree(g_out);
   xfree(g_data);
+  xfree(g_sigdata);
 
   CONF_modules_free();
   CONF_modules_unload(1);
