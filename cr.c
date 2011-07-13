@@ -20,12 +20,14 @@ char* g_public_key            = NULL;
 char* g_signature             = NULL;
 char* g_in                    = NULL;
 char* g_out                   = NULL;
+char* g_data                  = NULL;
 FILE* g_in_fp                 = NULL;
 FILE* g_out_fp                = NULL;
 FILE* g_signature_fp          = NULL;
 int   g_print_settings        = 0;
 int   g_print_help            = 0;
 int   g_failfast              = 0;
+int   g_data_length           = 0;
 enum EVP_DIGEST_TYPE g_digest = evp_none;
 enum outform g_outform = portable;
 
@@ -89,6 +91,8 @@ int read_password(const char* path, char* buf, int size)
   }
 
   memcpy(buf, pass, len);
+
+  /* valgrind compared, doc said static string, what gives? */
   free(pass);
   return len;
 }
@@ -149,6 +153,10 @@ int sign_callback() {
 
     if (!base64_fencode(fp_out, s)) {
       error_all_print("sign_callback");
+      goto error;
+    }
+
+    if (fwrite("\n", 1, 1, fp_out) != 1) {
       goto error;
     }
     break;
@@ -406,6 +414,11 @@ int main(int argc, char* argv[])
         g_out = strdup(get_arg(i, argc, argv));
         i += 1;
       }
+      else if (strcmp(argv[i], "-data") == 0) {
+        g_data = strdup(get_arg(i, argc, argv));
+        g_data_length = strlen(g_data);
+        i += 1;
+      }
       else if (strcmp(argv[i], "-failfast") == 0) {
         g_failfast = 1;
       }
@@ -443,8 +456,15 @@ int main(int argc, char* argv[])
     fprintf(stderr, "out         = %s\n", g_out);
   }
 
+  if (g_data != NULL) {
+    g_in_fp = fmemopen(g_data, g_data_length, "r");
 
-  if (g_in != NULL) {
+    if (g_in_fp == NULL) {
+      error_all_print("main");
+      goto exit_cleanup;
+    }
+  }
+  else if (g_in != NULL) {
     g_in_fp = fopen(g_in, "rb");
 
     if (g_in_fp == NULL) {
@@ -487,6 +507,7 @@ exit_cleanup:
   xfree(g_signature);
   xfree(g_in);
   xfree(g_out);
+  xfree(g_data);
 
   CONF_modules_free();
   CONF_modules_unload(1);
