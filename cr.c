@@ -27,6 +27,7 @@ int   g_print_settings        = 0;
 int   g_print_help            = 0;
 int   g_failfast              = 0;
 enum EVP_DIGEST_TYPE g_digest = evp_none;
+enum outform g_outform = portable;
 
 #define xfree(var) if (var != NULL) { free(var); var=NULL; }
 #define xfclose(var) if (var != NULL) { fclose(var); var=NULL; }
@@ -37,6 +38,8 @@ int exit_usage() {
   printf(" -help:     Print help text about <command>\n");
   printf(" -debug:    Print debug information\n");
   printf(" -failfast: Never prompt for password, fail instead\n");
+  printf(" -binary:   Read or write signature in raw binary form\n");
+  printf(" -portable: Read or write signature in portable base64 encoded form\n");
   exit(1);
 }
 
@@ -134,17 +137,26 @@ int sign_callback() {
     goto error;
   }
 
-  if (fwrite(EVP_DIGEST_TYPE_NAMES[type], EVP_DIGEST_TYPE_SIZES[type], 1, fp_out) != 1) {
-    goto error;
-  }
+  switch (g_outform) {
+  case portable:
+    if (fwrite(EVP_DIGEST_TYPE_NAMES[type], EVP_DIGEST_TYPE_SIZES[type], 1, fp_out) != 1) {
+      goto error;
+    }
 
-  if (fwrite(":", 1, 1, fp_out) != 1) {
-    goto error;
-  }
+    if (fwrite(":", 1, 1, fp_out) != 1) {
+      goto error;
+    }
 
-  if (!base64_fencode(fp_out, s)) {
-    error_all_print("sign_callback");
-    goto error;
+    if (!base64_fencode(fp_out, s)) {
+      error_all_print("sign_callback");
+      goto error;
+    }
+    break;
+  case binary:
+    if (fwrite(string_base(s), string_size(s), 1, fp_out) != 1) {
+      error_all_print("sign_callback");
+    }
+    break;
   }
 
   EVP_PKEY_free(evp);
@@ -213,6 +225,25 @@ int extract_type(FILE* fp, enum EVP_DIGEST_TYPE* type)
   return 0;
 }
 
+int binary_read(FILE* fp, string* s) {
+  char buffer[4096];
+  int inlen;
+
+  while (!feof(fp)) {
+    inlen = fread(buffer, 1, 4096, fp);
+    
+    if (ferror(fp)) {
+      return 0;
+    }
+
+    if (!string_append(s, (unsigned char*)buffer, inlen)) {
+      return 0;
+    }
+  }
+
+  return 1;
+}
+
 int verify_internal_callback(EVP_PKEY* evp) {
   FILE* fp = stdin;
   int ret;
@@ -225,21 +256,35 @@ int verify_internal_callback(EVP_PKEY* evp) {
     fp = g_in_fp;
   }
 
-  if (!extract_type(g_signature_fp, &type)) {
-    error_all_print("verify_internal_callback");
-    return 1;
+  ref = string_new();
+
+  switch (g_outform) {
+  case portable:
+    if (!extract_type(g_signature_fp, &type)) {
+      error_all_print("verify_internal_callback");
+      string_free(ref);
+      return 1;
+    }
+
+    if (!base64_fdecode(g_signature_fp, ref)) {
+      error_all_print("verify_internal_callback");
+      string_free(ref);
+      return 1;
+    }
+    break;
+  case binary:
+    if (!binary_read(g_signature_fp, ref)) {
+      error_all_print("verify_internal_callback");
+      string_free(ref);
+      return 1;
+    }
+    break;
   }
 
   if (g_digest != evp_none && type != g_digest) {
     error_push(ERROR_DIGEST_TYPE_MISMATCH);
     error_all_print("verify_internal_callback");
-    return 1;
-  }
-
-  ref = string_new();
-
-  if (!base64_fdecode(g_signature_fp, ref)) {
-    error_all_print("verify_internal_callback");
+    string_free(ref);
     return 1;
   }
 
@@ -363,6 +408,12 @@ int main(int argc, char* argv[])
       }
       else if (strcmp(argv[i], "-failfast") == 0) {
         g_failfast = 1;
+      }
+      else if (strcmp(argv[i], "-portable") == 0) {
+        g_outform = portable;
+      }
+      else if (strcmp(argv[i], "-binary") == 0) {
+        g_outform = binary;
       }
       else if (strcmp(argv[i], "-sha1") == 0) {
         g_digest = evp_sha1;

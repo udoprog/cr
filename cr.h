@@ -9,4 +9,9 @@ struct command_entry {
   const command_callback help_callback;
 };
 
+enum outform {
+  portable,
+  binary
+};
+
 #endif /*_CR_H_*/
