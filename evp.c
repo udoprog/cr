@@ -101,26 +101,17 @@ int evp_open_public(EVP_PKEY** evp, const char* path, password_callback callback
 int digest_fp(FILE* fp, enum EVP_DIGEST_TYPE type, unsigned char* digest, unsigned int* digest_length)
 {
   char buffer[EVP_IO_BUFFER_SIZE];
-  size_t r;
-  const EVP_MD* md;
-
+  size_t r = 0;
+  const EVP_MD* md = NULL;
   EVP_MD_CTX ctx;
 
-  EVP_MD_CTX_init(&ctx);
+  md = get_EVP_MD(type);
 
-  switch (type) {
-  case evp_sha1:
-    md = EVP_sha1();
-    break;
-  case evp_dss1:
-    md = EVP_dss1();
-    break;
-  case evp_md5:
-    md = EVP_md5();
-    break;
-  default:
+  if (md == NULL) {
     return 0;
   }
+
+  EVP_MD_CTX_init(&ctx);
   
   EVP_DigestInit(&ctx, md);
 
@@ -179,6 +170,12 @@ int evp_sign(EVP_PKEY* evp, enum EVP_DIGEST_TYPE type, FILE* fp, string* s)
   }
 
   ctx = EVP_MD_CTX_create();
+
+  if (ctx == NULL) {
+    fprintf(stderr, "evp_verify: failed to create digest context\n");
+    return EVP_ERROR;
+  }
+
   string_resize(s, EVP_PKEY_size(evp));
 
   ret = evp_sign_internal(evp, ctx, type, digest, digest_length, s);
@@ -249,6 +246,11 @@ int evp_verify(EVP_PKEY* evp, enum EVP_DIGEST_TYPE type, FILE* fp, string* s)
   }
 
   ctx = EVP_MD_CTX_create();
+
+  if (ctx == NULL) {
+    fprintf(stderr, "evp_verify: failed to create digest context\n");
+    return EVP_ERROR;
+  }
 
   ret = evp_verify_internal(evp, ctx, type, digest, digest_length, s);
 
