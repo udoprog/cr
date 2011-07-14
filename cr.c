@@ -144,8 +144,6 @@ int sign_callback() {
       type = evp_sha1;
       break;
     }
-
-    type = evp_sha1;
   }
 
   if (EVP_PKEY_type(evp->type) == EVP_PKEY_DSA && type != evp_dss1) {
