@@ -197,16 +197,19 @@ int evp_verify_internal(EVP_PKEY* evp, EVP_MD_CTX* ctx, enum EVP_DIGEST_TYPE typ
   md = get_EVP_MD(type);
 
   if (md == NULL) {
-    return 0;
+    fprintf(stderr, "evp_verify_internal: no message digest\n");
+    return EVP_ERROR;
   }
 
   EVP_MD_CTX_init(ctx);
 
   if (!EVP_VerifyInit(ctx, md)) {
+    fprintf(stderr, "evp_verify_iternal: EVP_VerifyInit failed\n");
     return EVP_ERROR;
   }
 
   if (!EVP_VerifyUpdate(ctx, digest, digest_length)) {
+    fprintf(stderr, "evp_verify_internal: EVP_VerifyUpdate failed\n");
     return EVP_ERROR;
   }
 
@@ -214,6 +217,7 @@ int evp_verify_internal(EVP_PKEY* evp, EVP_MD_CTX* ctx, enum EVP_DIGEST_TYPE typ
 
   switch (r) {
   case -1:
+    fprintf(stderr, "evp_verify: EVP_VerifyFinal failed\n");
     return EVP_ERROR;
   case 0:
     return EVP_FAILURE;
@@ -235,14 +239,12 @@ int evp_verify(EVP_PKEY* evp, enum EVP_DIGEST_TYPE type, FILE* fp, string* s)
   EVP_MD_CTX* ctx = NULL;
 
   if (evp == NULL) {
-    return EVP_ERROR;
-  }
-
-  if (EVP_PKEY_type(evp->type) == EVP_PKEY_DSA && type != evp_sha1) {
+    fprintf(stderr, "evp_verify: NULL EVP_PKEY\n");
     return EVP_ERROR;
   }
 
   if (!digest_fp(fp, type, digest, &digest_length)) {
+    fprintf(stderr, "evp_verify: message digest failed\n");
     return EVP_ERROR;
   }
 
