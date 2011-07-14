@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2011, John-John Tedro <johnjohn.tedro@toolchain.eu>
+ * All rights reserved.
+ * see LICENSE
+ */
 #ifndef _ERROR_H_
 #define _ERROR_H_
 

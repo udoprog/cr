@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2011, John-John Tedro <johnjohn.tedro@toolchain.eu>
+ * All rights reserved.
+ * see LICENSE
+ */
 #include "base64.h"
 #include "error.h"
 #include "bool.h"

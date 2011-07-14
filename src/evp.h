@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2011, John-John Tedro <johnjohn.tedro@toolchain.eu>
+ * All rights reserved.
+ * see LICENSE
+ */
 #ifndef _EVP_H_
 #define _EVP_H_
 

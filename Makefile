@@ -5,11 +5,11 @@ CC=gcc
 CFLAGS=${CFLAGS_OPENSSL} -Wall -pedantic -g
 LDFLAGS=${LDFLAGS_OPENSSL}
 
-SOURCES+=error.c
-SOURCES+=base64.c
-SOURCES+=cr.c
-SOURCES+=evp.c
-SOURCES+=string.c
+SOURCES+=src/error.c
+SOURCES+=src/base64.c
+SOURCES+=src/cr.c
+SOURCES+=src/evp.c
+SOURCES+=src/string.c
 OBJECTS=${SOURCES:.c=.o}
 
 all: cr
