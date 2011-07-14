@@ -134,7 +134,23 @@ int sign_callback() {
   }
 
   if (type == evp_none) {
+    switch (EVP_PKEY_type(evp->type)) {
+    case EVP_PKEY_DSA:
+      fprintf(stderr, "default digest is DSS1\n");
+      type = evp_dss1;
+      break;
+    default:
+      fprintf(stderr, "default digest is SHA1\n");
+      type = evp_sha1;
+      break;
+    }
+
     type = evp_sha1;
+  }
+
+  if (EVP_PKEY_type(evp->type) == EVP_PKEY_DSA && type != evp_dss1) {
+    fprintf(stderr, "dsa keys only support dss1 digests (-dss1)\n");
+    return 0;
   }
 
   if (!evp_sign(evp, type, fp_in, s)) {
@@ -434,6 +450,9 @@ int main(int argc, char* argv[])
       }
       else if (strcmp(argv[i], "-md5") == 0) {
         g_digest = evp_md5;
+      }
+      else if (strcmp(argv[i], "-dss1") == 0) {
+        g_digest = evp_dss1;
       }
       else if (strcmp(argv[i], "-debug") == 0) {
         g_print_settings = 1;

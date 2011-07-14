@@ -10,15 +10,26 @@
 
 const char* EVP_DIGEST_TYPE_NAMES[] = {
   "SHA1",
+  "DSS1",
   "MD5"
 };
 
 const int EVP_DIGEST_TYPE_SIZES[] = {
   4,
+  4,
   3
 };
 
-const int EVP_DIGEST_TYPE_COUNT = 2;
+const int EVP_DIGEST_TYPE_COUNT = 3;
+
+const EVP_MD* get_EVP_MD(enum EVP_DIGEST_TYPE type) {
+  switch (type) {
+  case evp_sha1:  return EVP_sha1();
+  case evp_dss1:  return EVP_dss1();
+  case evp_md5:   return EVP_md5();
+  default:        return NULL;
+  }
+}
 
 int pass_cb(char *buf, int size, int rwflag, void *u)
 {
@@ -101,6 +112,9 @@ int digest_fp(FILE* fp, enum EVP_DIGEST_TYPE type, unsigned char* digest, unsign
   case evp_sha1:
     md = EVP_sha1();
     break;
+  case evp_dss1:
+    md = EVP_dss1();
+    break;
   case evp_md5:
     md = EVP_md5();
     break;
@@ -128,16 +142,11 @@ int digest_fp(FILE* fp, enum EVP_DIGEST_TYPE type, unsigned char* digest, unsign
 
 int evp_sign_internal(EVP_PKEY* evp, EVP_MD_CTX* ctx, enum EVP_DIGEST_TYPE type, const unsigned char* digest, unsigned int digest_length, string* s)
 {
-  const EVP_MD* md;
+  const EVP_MD* md = NULL;
 
-  switch (type) {
-  case evp_sha1:
-    md = EVP_sha1();
-    break;
-  case evp_md5:
-    md = EVP_md5();
-    break;
-  default:
+  md = get_EVP_MD(type);
+
+  if (md == NULL) {
     return 0;
   }
 
@@ -165,10 +174,6 @@ int evp_sign(EVP_PKEY* evp, enum EVP_DIGEST_TYPE type, FILE* fp, string* s)
   EVP_MD_CTX* ctx;
   int ret;
 
-  if (EVP_PKEY_type(evp->type) == EVP_PKEY_DSA && type != evp_sha1) {
-    return 0;
-  }
-
   if (!digest_fp(fp, type, digest, &digest_length)) {
     return 0;
   }
@@ -186,18 +191,13 @@ int evp_sign(EVP_PKEY* evp, enum EVP_DIGEST_TYPE type, FILE* fp, string* s)
 
 int evp_verify_internal(EVP_PKEY* evp, EVP_MD_CTX* ctx, enum EVP_DIGEST_TYPE type, const unsigned char* digest, unsigned int digest_length, string* s)
 {
-  const EVP_MD* md;
-  int r;
+  const EVP_MD* md = NULL;
+  int r = 0;
 
-  switch (type) {
-  case evp_sha1:
-    md = EVP_sha1();
-    break;
-  case evp_md5:
-    md = EVP_md5();
-    break;
-  default:
-    return EVP_ERROR;
+  md = get_EVP_MD(type);
+
+  if (md == NULL) {
+    return 0;
   }
 
   EVP_MD_CTX_init(ctx);

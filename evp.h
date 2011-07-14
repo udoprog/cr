@@ -5,9 +5,6 @@
 
 #define EVP_IO_BUFFER_SIZE 4096
 
-#define EVP_SHA1 1
-#define EVP_MD5  2
-
 #define EVP_SUCCESS 1
 #define EVP_FAILURE 0
 #define EVP_ERROR -1
@@ -22,7 +19,8 @@ typedef struct {
 enum EVP_DIGEST_TYPE {
   evp_none = -1,
   evp_sha1 = 0,
-  evp_md5  = 1
+  evp_dss1 = 1,
+  evp_md5  = 2
 };
 
 extern const char* EVP_DIGEST_TYPE_NAMES[];
