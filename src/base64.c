@@ -3,10 +3,10 @@
  * All rights reserved.
  * see LICENSE
  */
+#include "str.h"
 #include "base64.h"
 #include "error.h"
 #include "bool.h"
-#include "string.h"
 
 #include <string.h>
 #include <openssl/bio.h>
