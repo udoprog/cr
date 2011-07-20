@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "string.h"
+#include "str.h"
 
 string* string_new() {
   return string_new_s(16);

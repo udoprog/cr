@@ -10,7 +10,7 @@
 
 #define BASE64_INITIAL_BUFFER 128
 
-#include "string.h"
+#include "str.h"
 
 int base64_fencode(FILE*, string*);
 int base64_fdecode(FILE*, string*);

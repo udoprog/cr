@@ -10,7 +10,7 @@
 
 #include <assert.h>
 
-#include "string.h"
+#include "str.h"
 #include "evp.h"
 
 const char* EVP_DIGEST_TYPE_NAMES[] = {

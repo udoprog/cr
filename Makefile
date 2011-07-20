@@ -9,7 +9,7 @@ SOURCES+=src/error.c
 SOURCES+=src/base64.c
 SOURCES+=src/cr.c
 SOURCES+=src/evp.c
-SOURCES+=src/string.c
+SOURCES+=src/str.c
 OBJECTS=${SOURCES:.c=.o}
 
 all: cr
